@@ -32,7 +32,7 @@ export default function Login() {
 
   return (
     <div className="relative min-h-screen flex items-center justify-center overflow-hidden font-sans">
-      {/* ARKA PLAN - MAVİ MODA KONSEPTİ */}
+      
       <div 
         className="absolute inset-0 z-0 bg-cover bg-center transition-all duration-1000"
         style={{ 
