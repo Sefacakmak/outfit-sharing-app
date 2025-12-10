@@ -1,21 +1,32 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
-import PrivateRoute from './components/PrivateRoute'; // <-- Bunu ekledik
+import PrivateRoute from './components/PrivateRoute';
+import DashboardLayout from './layouts/DashboardLayout';
+import OutfitList from './pages/dashboard/OutfitList';
+import AddOutfit from './pages/dashboard/AddOutfit'; // 1. Sayfayı içeri aldık
 
 function App() {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/login" replace />} />
-      
-      {/* Herkese Açık Rotalar */}
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       
-      {/* --- KORUMALI ROTALAR (Sadece giriş yapanlar görebilir) --- */}
+      {/* Korumalı Rotalar */}
       <Route element={<PrivateRoute />}>
-        {/* Dashboard ve diğer özel sayfalar buraya gelecek */}
-        <Route path="/dashboard" element={<div className="p-10 text-2xl font-bold">Giriş Başarılı! Burası Dashboard.</div>} />
+        
+        {/* Dashboard Layout Kapsayıcısı */}
+        <Route path="/dashboard" element={<DashboardLayout />}>
+           
+           {/* /dashboard -> Listeyi Göster */}
+           <Route index element={<OutfitList />} /> 
+           
+           {/* /dashboard/add -> Ekleme Formunu Göster */}
+           <Route path="add" element={<AddOutfit />} />
+        
+        </Route>
+
       </Route>
 
     </Routes>
