@@ -1,38 +1,65 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import axiosClient from '../../api/axiosClient';
+import axios from 'axios'; // Eğer özel bir axiosClient dosyanız yoksa direkt axios kullanın
 
 export default function Register() {
-  const [formData, setFormData] = useState({
-    first_name: '',
-    last_name: '',
-    email: '',
-    password: '',
-    password_confirmation: '',
-    organization_id: '1',
-  });
-  const [error, setError] = useState(null);
-  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleChange = (e) => setFormData({ ...formData, [e.target.name]: e.target.value });
+  // --- KULLANICI BİLGİLERİ STATE'İ ---
+  const [formData, setFormData] = useState({
+    username: '', // API genelde 'first_name' değil 'username' bekler (dokümana göre)
+    email: '',
+    password: '',
+    password_confirmation: '', // Şifre tekrarı kontrolü için
+  });
 
+  // --- SABİT ORGANİZASYON ID ---
+  // Bulduğunuz ID'yi burada sabit bir değişken olarak tutuyoruz
+  const ORGANIZATION_ID = 'e5eb2d2a-99f8-427a-b109-fccd62b0d982';
+
+  const [error, setError] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  // Input değişikliklerini yakala
+  const handleChange = (e) => {
+    setFormData({ ...formData, [e.target.name]: e.target.value });
+  };
+
+  // Form Gönderimi
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError(null);
 
+    // 1. Şifre Eşleşme Kontrolü
     if (formData.password !== formData.password_confirmation) {
       setError('Şifreler birbiriyle eşleşmiyor.');
       return;
     }
 
     setLoading(true);
+
     try {
-      await axiosClient.post('/auth/register', formData);
+      // 2. API'ye Gönderilecek Paketi Hazırla
+      // Organizasyon ID'sini buraya ekliyoruz
+      const payload = {
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+        organizationId: ORGANIZATION_ID // API'nin istediği format
+      };
+
+      // 3. İstek Gönder (URL'yi kontrol edin)
+      await axios.post('https://embedo1api.ardaongun.com/api/auth/register', payload);
+
+      // 4. Başarılı ise Login'e yönlendir
+      alert("Kayıt başarılı! Giriş sayfasına yönlendiriliyorsunuz.");
       navigate('/login');
+
     } catch (err) {
       console.error(err);
-      setError('Kayıt işlemi başarısız. Lütfen bilgileri kontrol edin.');
+      // Hata mesajını API'den almaya çalış, yoksa standart mesaj göster
+      const errorMessage = err.response?.data?.message || 'Kayıt işlemi başarısız. Bilgileri kontrol edin.';
+      setError(errorMessage);
     } finally {
       setLoading(false);
     }
@@ -40,7 +67,8 @@ export default function Register() {
 
   return (
     <div className="relative min-h-screen flex items-center justify-center overflow-hidden font-sans">
-      {/* ARKA PLAN - FARKLI BİR MAVİ TON */}
+      
+      {/* ARKA PLAN */}
       <div 
         className="absolute inset-0 z-0 bg-cover bg-center"
         style={{ 
@@ -61,25 +89,18 @@ export default function Register() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <input
-                name="first_name"
+            
+            {/* Kullanıcı Adı */}
+            <input
+                name="username"
                 type="text"
                 required
-                placeholder="Ad"
-                className="bg-slate-950/50 text-white placeholder-slate-400 border border-slate-700 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
+                placeholder="Kullanıcı Adı"
+                className="w-full bg-slate-950/50 text-white placeholder-slate-400 border border-slate-700 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
                 onChange={handleChange}
-              />
-              <input
-                name="last_name"
-                type="text"
-                required
-                placeholder="Soyad"
-                className="bg-slate-950/50 text-white placeholder-slate-400 border border-slate-700 rounded-xl px-4 py-3 outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 transition-all"
-                onChange={handleChange}
-              />
-            </div>
+            />
 
+            {/* Email */}
             <input
               name="email"
               type="email"
@@ -89,6 +110,7 @@ export default function Register() {
               onChange={handleChange}
             />
 
+            {/* Şifre */}
             <input
               name="password"
               type="password"
@@ -98,6 +120,7 @@ export default function Register() {
               onChange={handleChange}
             />
 
+            {/* Şifre Tekrar */}
             <input
               name="password_confirmation"
               type="password"
@@ -107,12 +130,14 @@ export default function Register() {
               onChange={handleChange}
             />
 
+            {/* Hata Mesajı */}
             {error && (
               <div className="p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-200 text-sm text-center">
-                {error}
+                {typeof error === 'string' ? error : 'Bir hata oluştu.'}
               </div>
             )}
 
+            {/* Kayıt Butonu */}
             <button
               type="submit"
               disabled={loading}

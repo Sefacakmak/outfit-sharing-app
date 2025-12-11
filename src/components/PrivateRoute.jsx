@@ -1,13 +1,16 @@
-import { Navigate, Outlet } from 'react-router-dom';
-import useAuthStore from '../store/useAuthStore';
+import { Navigate, Outlet } from "react-router-dom";
 
 const PrivateRoute = () => {
-  // Zustand store'dan giriş yapıp yapmadığını kontrol et
-  const { isAuthenticated } = useAuthStore();
 
-  // Eğer kullanıcı giriş yapmışsa sayfayı göster (Outlet)
-  // Yapmamışsa Login sayfasına fırlat
-  return isAuthenticated ? <Outlet /> : <Navigate to="/login" replace />;
+  // Login.jsx dosyasında 'accessToken' ismiyle kaydetmiştik.
+  // Burada da aynı isimle okumak ZORUNDAYIZ.
+  const token = localStorage.getItem("accessToken");
+
+  // Kontrol amaçlı konsola yazdıralım (F12'de görebilirsin)
+  console.log("Güvenlik Kontrolü: Token var mı?", !!token);
+
+  // Token varsa içeri gir (Outlet), yoksa Login'e git (Navigate)
+  return token ? <Outlet /> : <Navigate to="/login" replace />;
 };
 
 export default PrivateRoute;

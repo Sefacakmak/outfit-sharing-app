@@ -1,47 +1,50 @@
 import { create } from 'zustand';
-import { jwtDecode } from 'jwt-decode';
+import api from '../services/api';
 
-const useAuthStore = create((set, get) => ({
+const useAuthStore = create((set) => ({
   user: null,
-  accessToken: localStorage.getItem('accessToken') || null,
-  refreshToken: localStorage.getItem('refreshToken') || null,
-  isAuthenticated: !!localStorage.getItem('accessToken'),
+  isAuthenticated: false,
+  isLoading: false,
+  error: null,
 
-  // Giriş İşlemi
-  login: (accessToken, refreshToken) => {
-    // Token'ları kaydet
-    localStorage.setItem('accessToken', accessToken);
-    localStorage.setItem('refreshToken', refreshToken);
+  login: async (email, password) => {
+    set({ isLoading: true, error: null });
+    
+    try {
+      const response = await api.post('/auth/login', { email, password });
+      
+      // DÜZELTME BURADA YAPILDI:
+      // Veri, response.data.data içinde geliyor.
+      // Ve ismi 'accessToken' (bitişik).
+      const { accessToken, refreshToken, user } = response.data.data; 
 
-    // Token içinden kullanıcı bilgisini ve rolü oku
-    const decodedUser = jwtDecode(accessToken);
+      // Token'ı kaydediyoruz
+      localStorage.setItem('accessToken', accessToken);
+      // Refresh token'ı da kaydedelim (ileride lazım olur)
+      if (refreshToken) localStorage.setItem('refreshToken', refreshToken);
 
-    set({
-      accessToken,
-      refreshToken,
-      user: decodedUser,
-      isAuthenticated: true,
-    });
+      set({ 
+        isAuthenticated: true, 
+        user: user || { email }, // User objesi gelmiyorsa geçici olarak email koyalım
+        isLoading: false 
+      });
+
+      return true;
+    } catch (error) {
+      console.error("Login hatası:", error);
+      set({ 
+        error: error.response?.data?.message || 'Giriş başarısız', 
+        isLoading: false 
+      });
+      return false;
+    }
   },
 
-  // Çıkış İşlemi
   logout: () => {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
-    set({
-      accessToken: null,
-      refreshToken: null,
-      user: null,
-      isAuthenticated: false,
-    });
-  },
-
-  // Access Token Yenileme (Axios interceptor kullanacak)
-  setAccessToken: (newAccessToken) => {
-    localStorage.setItem('accessToken', newAccessToken);
-    const decodedUser = jwtDecode(newAccessToken);
-    set({ accessToken: newAccessToken, user: decodedUser });
-  },
+    set({ user: null, isAuthenticated: false });
+  }
 }));
 
 export default useAuthStore;
