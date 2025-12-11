@@ -1,34 +1,41 @@
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import Login from './pages/auth/Login';
 import Register from './pages/auth/Register';
 import PrivateRoute from './components/PrivateRoute';
 import DashboardLayout from './layouts/DashboardLayout';
 import OutfitList from './pages/dashboard/OutfitList';
-import AddOutfit from './pages/dashboard/AddOutfit'; // 1. Sayfayı içeri aldık
+import AddOutfit from './pages/dashboard/AddOutfit'; 
+
+// DİKKAT: Artık dosya adın UserExplore.jsx olmak ZORUNDA
+import UserExplore from "./pages/user/UserExplore"; 
+// Eğer UserAddOutfit dosyan yoksa bu satırı ve aşağıdaki route'u silmen gerekebilir:
+import UserAddOutfit from "./pages/user/UserAddOutfit"; 
+
+import LandingPage from './pages/LandingPage';
+import About from './pages/About';
 
 function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/login" replace />} />
+      <Route path="/" element={<LandingPage />} />
+      <Route path="/about" element={<About />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       
-      {/* Korumalı Rotalar */}
+      {/* KORUMALI ALAN */}
       <Route element={<PrivateRoute />}>
         
-        {/* Dashboard Layout Kapsayıcısı */}
+        {/* User Girecek */}
+        <Route path="/explore" element={<UserExplore />} />
+        <Route path="/add-outfit" element={<UserAddOutfit />} />
+
+        {/* Admin Girecek */}
         <Route path="/dashboard" element={<DashboardLayout />}>
-           
-           {/* /dashboard -> Listeyi Göster */}
            <Route index element={<OutfitList />} /> 
-           
-           {/* /dashboard/add -> Ekleme Formunu Göster */}
            <Route path="add" element={<AddOutfit />} />
-        
         </Route>
 
       </Route>
-
     </Routes>
   );
 }

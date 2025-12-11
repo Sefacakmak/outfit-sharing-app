@@ -99,8 +99,8 @@ const OutfitList = () => {
              }
           }
 
-          // --- 2. FİYAT DÜZELTME (item.price YOKSA item.value KULLAN) ---
-          // Ekran görüntüsünde 'value: 0' gördük, o yüzden ikisini de kontrol ediyoruz.
+          
+         
           const price = item.price !== undefined ? item.price : item.value;
 
           const itemId = item._id || item.id;

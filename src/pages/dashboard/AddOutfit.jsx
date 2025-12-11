@@ -49,11 +49,7 @@ const AddOutfit = () => {
         name: formData.name,
         description: formData.description,
         
-        // DÜZELTME BURADA:
-        // Eskiden sadece price gönderiyorduk:
-        // price: Number(formData.price),
-        
-        // ŞİMDİ İKİSİNİ DE GÖNDERİYORUZ (Garanti olsun):
+       
         price: Number(formData.price),
         value: Number(formData.price), // Sunucu muhtemelen bunu bekliyor
         
