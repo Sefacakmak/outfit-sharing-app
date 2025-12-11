@@ -8,12 +8,14 @@ const UserAddOutfit = () => {
   // Form verileri
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
-  const [price, setPrice] = useState("");
+  const [value, setValue] = useState("");
   const [imageFile, setImageFile] = useState(null);
+  const [tags, setTags] = useState([]);
   
   // Durumlar
   const [loading, setLoading] = useState(false);
   const [preview, setPreview] = useState(null);
+  const [itemId, setItemId] = useState(null);
 
   // Resim seçildiğinde çalışır
   const handleImageChange = (e) => {
@@ -26,49 +28,88 @@ const UserAddOutfit = () => {
   };
 
   const handleSubmit = async (e) => {
-  e.preventDefault();
-  setLoading(true);
+    e.preventDefault();
+    setLoading(true);
 
-  try {
-    const token = localStorage.getItem("accessToken");
+    try {
+      const token = localStorage.getItem("accessToken");
+      
+      console.log("Token alındı:", token ? "✓ Var" : "✗ Yok");
+      console.log("Token uzunluğu:", token?.length);
 
-    // Resmi Base64'e çevir
-    let imageBase64 = null;
-    if (imageFile) {
-      imageBase64 = await new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result);
-        reader.readAsDataURL(imageFile);
-      });
-    }
-
-    // JSON olarak gönder
-    const response = await axios.post(
-      "https://embedo1api.ardaongun.com/api/items/add-item",
-      {
+      // Form verileri
+      const itemData = {
         name: name,
         description: description,
-        value: parseFloat(price), // "value" olarak gönder, Postman'de öyle
-        tags: [] // Boş array gönder
-      },
-      {
-        headers: { 
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${token}`
+        value: value ? parseFloat(value) : 0,
+        tags: tags
+      };
+
+      console.log("1. Item oluşturuluyor:", itemData);
+
+      const createItemResponse = await axios.post(
+        "https://embedo1api.ardaongun.com/api/items/add-item",
+        itemData,
+        {
+          headers: {
+            "Content-Type": "application/json",
+            "Authorization": `Bearer ${token}`
+          }
         }
+      );
+
+      console.log("API Response tamamı:", createItemResponse.data);
+      
+      // Response yapısını kontrol et
+      const newItemId = createItemResponse.data?.data?._id || createItemResponse.data?.data?.id || createItemResponse.data?._id || createItemResponse.data?.id || null;
+      setItemId(newItemId);
+      console.log("2. Item oluşturuldu, ID:", newItemId);
+
+      // Adım 2: Resim yükle (eğer varsa ve itemId mevcutsa)
+      if (imageFile && newItemId) {
+        const photoFormData = new FormData();
+        photoFormData.append("file", imageFile);
+        photoFormData.append("itemId", newItemId);
+
+        console.log("3. Resim yükleniyor...");
+
+        await axios.post(
+          "https://embedo1api.ardaongun.com/api/items/add-item-photo",
+          photoFormData,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+              "Authorization": `Bearer ${token}`
+            }
+          }
+        );
+
+        console.log("4. Resim başarıyla yüklendi");
+      } else if (imageFile && !newItemId) {
+        console.warn("Resim yüklenemiyor: itemId alınamadı, foto yükleme atlandı.");
       }
-    );
 
-    alert("Harika! Kombin paylaşıldı.");
-    navigate("/explore");
+      alert("Harika! Kombin paylaşıldı.");
+      navigate("/explore");
 
-  } catch (error) {
-    console.error("Yükleme Hatası:", error);
-    alert("Yükleme başarısız! " + (error.response?.data?.message || "Bir hata oluştu."));
-  } finally {
-    setLoading(false);
-  }
-};
+    } catch (error) {
+      console.error("Yükleme Hatası:", error);
+      console.error("Hata Detayı:", error.response?.data);
+      console.error("Status:", error.response?.status);
+
+      // Eğer yetkisiz ise (401) kullanıcının token'ı temizle ve girişe yönlendir
+      if (error.response?.status === 401) {
+        localStorage.removeItem("accessToken");
+        alert("Oturum süreniz dolmuş veya yetkisizsiniz. Lütfen tekrar giriş yapın.");
+        navigate("/login");
+        return;
+      }
+
+      alert("Yükleme başarısız! " + (error.response?.data?.message || error.message || "Bir hata oluştu."));
+    } finally {
+      setLoading(false);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
@@ -129,8 +170,8 @@ const UserAddOutfit = () => {
               type="number" 
               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition"
               placeholder="0.00"
-              value={price}
-              onChange={(e) => setPrice(e.target.value)}
+              value={value}
+              onChange={(e) => setValue(e.target.value)}
             />
           </div>
 
