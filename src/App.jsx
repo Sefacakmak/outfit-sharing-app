@@ -6,9 +6,7 @@ import DashboardLayout from './layouts/DashboardLayout';
 import OutfitList from './pages/dashboard/OutfitList';
 import AddOutfit from './pages/dashboard/AddOutfit'; 
 
-// DİKKAT: Artık dosya adın UserExplore.jsx olmak ZORUNDA
 import UserExplore from "./pages/user/UserExplore"; 
-// Eğer UserAddOutfit dosyan yoksa bu satırı ve aşağıdaki route'u silmen gerekebilir:
 import UserAddOutfit from "./pages/user/UserAddOutfit"; 
 
 import LandingPage from './pages/LandingPage';
@@ -28,6 +26,7 @@ function App() {
         {/* User Girecek */}
         <Route path="/explore" element={<UserExplore />} />
         <Route path="/add-outfit" element={<UserAddOutfit />} />
+        <Route path="/add-item" element={<UserAddOutfit />} /> {/* YENİ ROUTE */}
 
         {/* Admin Girecek */}
         <Route path="/dashboard" element={<DashboardLayout />}>

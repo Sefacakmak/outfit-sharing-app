@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import axios from 'axios'; // Eğer özel bir axiosClient dosyanız yoksa direkt axios kullanın
+import axios from 'axios';
 
 export default function Register() {
   const navigate = useNavigate();
@@ -13,8 +13,6 @@ export default function Register() {
     password_confirmation: '', // Şifre tekrarı kontrolü için
   });
 
-  // --- SABİT ORGANİZASYON ID ---
-  // Bulduğunuz ID'yi burada sabit bir değişken olarak tutuyoruz
   const ORGANIZATION_ID = 'e5eb2d2a-99f8-427a-b109-fccd62b0d982';
 
   const [error, setError] = useState(null);
