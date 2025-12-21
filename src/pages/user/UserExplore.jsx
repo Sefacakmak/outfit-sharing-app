@@ -142,14 +142,15 @@ export default function UserExplore() {
         queryParams += `&tag=${encodeURIComponent(selectedTag)}`;
       }
 
-      // --- KRİTİK DÜZELTME ---
-      // Backend sadece bu değerleri kabul ediyor. 
-      // "price" gibi desteklenmeyenleri göndermiyoruz (Hata almamak için)
+      // 🔥 KRİTİK DÜzELTME: Backend'in kabul ettiği sort değerlerini kullan
       const validBackendSorts = ["newest", "oldest", "a-z", "z-a"];
       
       if (validBackendSorts.includes(sortOption)) {
         queryParams += `&sort=${sortOption}`;
       }
+      
+      // 🐛 DEBUG: Hangi URL'ye istek atıldığını görelim
+      console.log("📡 API İsteği:", `/items/get-items${queryParams}`);
 
       const response = await api.get(`/items/get-items${queryParams}`);
 
@@ -177,17 +178,27 @@ export default function UserExplore() {
       }
 
       // --- FRONTEND SIRALAMA (Client-Side Sorting) ---
-      // Backend fiyat sıralamayı desteklemediği için burada JS ile sıralıyoruz
+      // Backend fiyat sıralamasını desteklemediği için burada JS ile sıralıyoruz
       if (sortOption === "price_asc") {
         cleanData.sort((a, b) => a.value - b.value);
       } else if (sortOption === "price_desc") {
         cleanData.sort((a, b) => b.value - a.value);
       }
 
+      console.log("✅ Veri başarıyla yüklendi:", cleanData.length, "öğe");
       setItems(cleanData);
 
     } catch (error) {
       console.error("❌ Veri çekme hatası:", error);
+      
+      // 🐛 Hata detayını görelim
+      if (error.response) {
+        console.error("Hata Detayı:", {
+          status: error.response.status,
+          data: error.response.data,
+          url: error.config?.url
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -282,7 +293,7 @@ export default function UserExplore() {
               />
             </div>
             
-            {/* Sıralama Dropdown - Değerler Düzeltildi */}
+            {/* Sıralama Dropdown */}
             <div className="relative min-w-[200px]">
                <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
                <select 
@@ -292,12 +303,8 @@ export default function UserExplore() {
                >
                  <option value="newest">En Yeni</option>
                  <option value="oldest">En Eski</option>
-                 
-                 {/* API için tire (-) kullanımı önemli */}
                  <option value="a-z">İsim (A-Z)</option>
                  <option value="z-a">İsim (Z-A)</option>
-
-                 {/* Bunlar Frontend'de işlenecek */}
                  <option value="price_asc">Fiyat (Artan)</option>
                  <option value="price_desc">Fiyat (Azalan)</option>
                </select>
@@ -307,7 +314,7 @@ export default function UserExplore() {
             </div>
         </div>
 
-        {/* Tag Filters (Yatay Scroll) */}
+        {/* Tag Filters */}
         {availableTags.length > 0 && (
           <div className="mb-8 overflow-x-auto pb-2 scrollbar-hide">
             <div className="flex gap-2 min-w-max">

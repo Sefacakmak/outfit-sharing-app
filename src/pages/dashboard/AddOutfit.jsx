@@ -1,6 +1,6 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
-import { Upload, X, Save, ArrowLeft } from "lucide-react";
+import { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { Upload, X, Save, ArrowLeft } from 'lucide-react';
 import api from '../../services/api';
 
 const AddOutfit = () => {
@@ -11,22 +11,28 @@ const AddOutfit = () => {
   const [description, setDescription] = useState("");
   const [value, setValue] = useState("");
   
-  // Tag Yönetimi (ID tabanlı)
+  // 🔥 CRITICAL: Admin için TAG ID'leri kullanılmalı
   const [selectedTagIds, setSelectedTagIds] = useState([]);
-  const [availableTags, setAvailableTags] = useState([]);
+  const [availableTags, setAvailableTags] = useState([]); // {_id, name} şeklinde objeler
   
   const [imageFile, setImageFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [tagsLoading, setTagsLoading] = useState(true);
 
-  // 1. Tag Listesini Çek
+  // Tag Listesini Çek
   useEffect(() => {
     const fetchTags = async () => {
       try {
+        setTagsLoading(true);
+        console.log("📡 Tag'ler yükleniyor...");
+        
         const response = await api.get('/tags/get-tags');
+        console.log("📦 Tag API Yanıtı:", response.data);
+        
         let tagList = [];
         
-        // API yanıtını güvenli çözümle
+        // API yanıtının farklı formatlarını handle et
         if (response.data?.data?.tags) {
           tagList = response.data.data.tags;
         } else if (response.data?.tags) {
@@ -37,9 +43,25 @@ const AddOutfit = () => {
           tagList = response.data;
         }
 
-        setAvailableTags(tagList);
+        // Tag'lerin {_id, name} formatında olduğundan emin ol
+        const formattedTags = tagList.map(tag => {
+          if (typeof tag === 'object' && tag._id) {
+            return { _id: tag._id, name: tag.name || 'İsimsiz' };
+          }
+          // Eğer sadece string ise (olmamalı ama yine de kontrol)
+          console.warn("⚠️ Tag objesi değil:", tag);
+          return null;
+        }).filter(Boolean);
+
+        console.log("✅ Formatlanmış Tag'ler:", formattedTags);
+        setAvailableTags(formattedTags);
+        
       } catch (error) {
-        console.error("Tag listesi yüklenemedi:", error);
+        console.error("❌ Tag listesi yüklenemedi:", error);
+        console.error("Hata Detayı:", error.response?.data);
+        alert("Tag'ler yüklenirken hata oluştu. Lütfen sayfayı yenileyin.");
+      } finally {
+        setTagsLoading(false);
       }
     };
     fetchTags();
@@ -54,12 +76,20 @@ const AddOutfit = () => {
     }
   };
 
-  // Tag Seçip/Çıkarma
+  // Tag Seçip/Çıkarma (ID bazlı)
   const handleTagToggle = (tagId) => {
+    console.log("🔘 Tag tıklandı (ID):", tagId);
+    
     if (selectedTagIds.includes(tagId)) {
-      setSelectedTagIds(selectedTagIds.filter(id => id !== tagId));
+      // Tag varsa çıkar
+      const newTags = selectedTagIds.filter(id => id !== tagId);
+      setSelectedTagIds(newTags);
+      console.log("➖ Tag çıkarıldı. Yeni liste:", newTags);
     } else {
-      setSelectedTagIds([...selectedTagIds, tagId]);
+      // Tag yoksa ekle
+      const newTags = [...selectedTagIds, tagId];
+      setSelectedTagIds(newTags);
+      console.log("➕ Tag eklendi. Yeni liste:", newTags);
     }
   };
 
@@ -71,19 +101,29 @@ const AddOutfit = () => {
     try {
       // ADIM 1: Kıyafet Verisini Gönder (JSON)
       const itemData = {
-        name: name,
-        description: description,
-        value: Number(value),
-        tags: selectedTagIds // Backend ID bekliyor
+        name: name.trim(),
+        description: description.trim(),
+        value: Number(value) || 0,
+        tags: selectedTagIds // 🔥 Admin TAG ID'lerini göndermeli
       };
 
-      console.log("📤 Admin Ekleme - Veri:", itemData);
+      console.log("📤 Gönderilen Veri:", itemData);
+      console.log("📋 Tag ID'leri:", selectedTagIds);
+
+      // Eğer hiç tag seçilmemişse uyar
+      if (selectedTagIds.length === 0) {
+        console.warn("⚠️ Hiç tag seçilmedi!");
+      }
 
       const createResponse = await api.post("/items/add-item", itemData);
       
+      console.log("✅ Ürün oluşturuldu:", createResponse.data);
+      
       const newItemId = createResponse.data?.data?._id || createResponse.data?._id;
 
-      if (!newItemId) throw new Error("Item ID alınamadı");
+      if (!newItemId) {
+        throw new Error("Item ID alınamadı");
+      }
 
       // ADIM 2: Varsa Resmi Yükle (FormData)
       if (imageFile) {
@@ -94,19 +134,23 @@ const AddOutfit = () => {
         formData.append("itemId", newItemId);
 
         await api.post("/items/add-item-photo", formData);
+        console.log("✅ Resim yüklendi!");
       }
 
-      alert("Kıyafet başarıyla eklendi!");
-      navigate("/dashboard/outfits"); // Listeye dön
+      alert("✅ Kıyafet başarıyla eklendi!");
+      navigate("/dashboard/outfits");
 
     } catch (error) {
-      console.error("Ekleme hatası:", error);
-      const msg = error.response?.data?.message || "Bir hata oluştu.";
+      console.error("❌ Ekleme hatası:", error);
+      console.error("📋 Hata Detayı:", error.response?.data);
       
-      if (msg.includes("tags")) {
-         alert("Hata: Seçilen etiketlerden bazıları sunucuda bulunamadı. Lütfen sayfayı yenileyip tekrar deneyin.");
+      const msg = error.response?.data?.message || error.message || "Bir hata oluştu.";
+      
+      // Hata mesajını kullanıcıya göster
+      if (msg.includes("tags") || msg.includes("tag")) {
+        alert(`⚠️ Tag Hatası:\n\n${msg}\n\nSeçili tag ID'leri: ${selectedTagIds.join(', ')}\n\nLütfen sayfayı yenileyip tekrar deneyin.`);
       } else {
-         alert("Hata: " + msg);
+        alert("❌ Hata: " + msg);
       }
     } finally {
       setLoading(false);
@@ -118,10 +162,10 @@ const AddOutfit = () => {
       {/* Header */}
       <div className="flex items-center gap-4 mb-8">
         <button 
-            onClick={() => navigate('/dashboard/outfits')}
-            className="p-2 hover:bg-gray-100 rounded-full transition"
+          onClick={() => navigate('/dashboard/outfits')}
+          className="p-2 hover:bg-gray-100 rounded-full transition"
         >
-            <ArrowLeft size={24} className="text-gray-600" />
+          <ArrowLeft size={24} className="text-gray-600" />
         </button>
         <h1 className="text-2xl font-bold text-gray-800">Yeni Kıyafet Ekle (Admin)</h1>
       </div>
@@ -130,156 +174,179 @@ const AddOutfit = () => {
         
         {/* Sol Kolon: Resim Yükleme */}
         <div className="lg:col-span-1">
-            <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
-                <h3 className="font-semibold text-gray-700 mb-4">Ürün Fotoğrafı</h3>
-                
-                <div className="relative aspect-[3/4] bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center hover:bg-gray-100 transition cursor-pointer overflow-hidden group">
-                    <input 
-                        type="file" 
-                        accept="image/*" 
-                        onChange={handleImageChange}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                    />
-                    
-                    {preview ? (
-                        <>
-                            <img src={preview} alt="Önizleme" className="w-full h-full object-cover" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center z-20 pointer-events-none">
-                                <span className="text-white font-medium">Fotoğrafı Değiştir</span>
-                            </div>
-                        </>
-                    ) : (
-                        <div className="text-center p-4">
-                            <Upload className="w-12 h-12 text-gray-400 mx-auto mb-2" />
-                            <span className="text-gray-500 font-medium">Fotoğraf Yükle</span>
-                            <p className="text-xs text-gray-400 mt-1">PNG, JPG</p>
-                        </div>
-                    )}
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+            <h3 className="font-semibold text-gray-700 mb-4">Ürün Fotoğrafı</h3>
+            
+            <div className="relative aspect-[3/4] bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center hover:bg-gray-100 transition cursor-pointer overflow-hidden group">
+              <input 
+                type="file" 
+                accept="image/*" 
+                onChange={handleImageChange}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+              />
+              
+              {preview ? (
+                <>
+                  <img src={preview} alt="Önizleme" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center z-20 pointer-events-none">
+                    <span className="text-white font-medium">Fotoğrafı Değiştir</span>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center p-4">
+                  <Upload className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                  <span className="text-gray-500 font-medium">Fotoğraf Yükle</span>
+                  <p className="text-xs text-gray-400 mt-1">PNG, JPG</p>
                 </div>
-                
-                {preview && (
-                    <button 
-                        onClick={() => { setPreview(null); setImageFile(null); }}
-                        className="mt-3 w-full py-2 text-red-600 text-sm font-medium hover:bg-red-50 rounded-lg transition"
-                    >
-                        Fotoğrafı Kaldır
-                    </button>
-                )}
+              )}
             </div>
+            
+            {preview && (
+              <button 
+                onClick={() => { setPreview(null); setImageFile(null); }}
+                className="mt-3 w-full py-2 text-red-600 text-sm font-medium hover:bg-red-50 rounded-lg transition"
+              >
+                Fotoğrafı Kaldır
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Sağ Kolon: Form */}
         <div className="lg:col-span-2">
-            <form onSubmit={handleSubmit} className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 space-y-6">
-                
-                {/* İsim */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Kıyafet Adı</label>
-                    <input 
-                        type="text" 
-                        required 
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
-                        placeholder="Örn: Mavi Kot Ceket"
-                        value={name} 
-                        onChange={(e) => setName(e.target.value)} 
-                    />
+          <form onSubmit={handleSubmit} className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 space-y-6">
+            
+            {/* İsim */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Kıyafet Adı</label>
+              <input 
+                type="text" 
+                required 
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
+                placeholder="Örn: Mavi Kot Ceket"
+                value={name} 
+                onChange={(e) => setName(e.target.value)} 
+              />
+            </div>
+
+            {/* Açıklama */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Açıklama</label>
+              <textarea 
+                required 
+                rows="4"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
+                placeholder="Ürün hakkında detaylı bilgi..."
+                value={description} 
+                onChange={(e) => setDescription(e.target.value)} 
+              />
+            </div>
+
+            {/* Fiyat */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Fiyat (₺)</label>
+              <input 
+                type="number" 
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
+                placeholder="0.00"
+                value={value} 
+                onChange={(e) => setValue(e.target.value)} 
+              />
+            </div>
+
+            {/* Tag Seçimi - DÜZELTİLMİŞ */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Etiketler {selectedTagIds.length > 0 && <span className="text-blue-600">({selectedTagIds.length} seçili)</span>}
+              </label>
+              
+              {tagsLoading ? (
+                <div className="flex justify-center items-center py-8 border border-gray-200 rounded-lg bg-gray-50">
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                    <p className="text-sm text-gray-500">Etiketler yükleniyor...</p>
+                  </div>
                 </div>
-
-                {/* Açıklama */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Açıklama</label>
-                    <textarea 
-                        required 
-                        rows="4"
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
-                        placeholder="Ürün hakkında detaylı bilgi..."
-                        value={description} 
-                        onChange={(e) => setDescription(e.target.value)} 
-                    />
+              ) : availableTags.length > 0 ? (
+                <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 max-h-48 overflow-y-auto">
+                  <div className="flex flex-wrap gap-2">
+                    {availableTags.map(tag => {
+                      const isSelected = selectedTagIds.includes(tag._id);
+                      
+                      return (
+                        <button
+                          key={tag._id}
+                          type="button"
+                          onClick={() => handleTagToggle(tag._id)}
+                          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 border ${
+                            isSelected
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-sm scale-105'
+                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100 hover:border-blue-300'
+                          }`}
+                        >
+                          {isSelected && <span className="mr-1">✓</span>}
+                          {tag.name}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
-
-                {/* Fiyat */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Fiyat (₺)</label>
-                    <input 
-                        type="number" 
-                        className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
-                        placeholder="0.00"
-                        value={value} 
-                        onChange={(e) => setValue(e.target.value)} 
-                    />
+              ) : (
+                <div className="text-center py-8 border border-gray-200 rounded-lg bg-gray-50">
+                  <p className="text-gray-500 mb-2">⚠️ Henüz sistemde etiket yok.</p>
+                  <button 
+                    type="button"
+                    onClick={() => navigate('/dashboard/tags')}
+                    className="text-blue-600 text-sm font-medium hover:underline"
+                  >
+                    Etiket Yönetimine Git →
+                  </button>
                 </div>
-
-                {/* Tag Seçimi (ID Bazlı) */}
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">Etiketler</label>
-                    <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 max-h-48 overflow-y-auto">
-                        {availableTags.length > 0 ? (
-                            <div className="flex flex-wrap gap-2">
-                                {availableTags.map(tag => {
-                                    // Tag objesi kontrolü
-                                    const tagId = tag._id || tag.id;
-                                    const tagName = tag.name || tag;
-                                    
-                                    if (!tagId) return null;
-
-                                    const isSelected = selectedTagIds.includes(tagId);
-                                    
-                                    return (
-                                        <button
-                                            key={tagId}
-                                            type="button"
-                                            onClick={() => handleTagToggle(tagId)}
-                                            className={`px-3 py-1.5 rounded-full text-sm font-medium transition border ${
-                                                isSelected
-                                                ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                                                : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100'
-                                            }`}
-                                        >
-                                            {tagName}
-                                        </button>
-                                    );
-                                })}
-                            </div>
-                        ) : (
-                            <div className="text-center text-gray-500 py-2">
-                                <p>Henüz sistemde etiket yok.</p>
-                                <button 
-                                    onClick={() => navigate('/dashboard/tags')}
-                                    className="text-blue-600 text-sm font-medium hover:underline mt-1"
-                                >
-                                    Etiket Yönetimine Git
-                                </button>
-                            </div>
-                        )}
-                    </div>
-                    <p className="text-xs text-gray-500 mt-2">
-                        Seçili: {selectedTagIds.length} etiket
-                    </p>
+              )}
+              
+              {/* Seçili Tag'lerin İsimleri ve ID'leri */}
+              {selectedTagIds.length > 0 && (
+                <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-xs font-semibold text-blue-700 mb-1">Seçili Etiketler:</p>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {selectedTagIds.map((id) => {
+                      const tag = availableTags.find(t => t._id === id);
+                      return (
+                        <span key={id} className="text-xs bg-blue-600 text-white px-2 py-1 rounded-full">
+                          {tag?.name || 'Bilinmiyor'}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-blue-600 font-mono">
+                    ID'ler: {selectedTagIds.join(', ')}
+                  </p>
                 </div>
+              )}
+            </div>
 
-                {/* Submit Button */}
-                <div className="pt-4 border-t border-gray-100 flex justify-end">
-                    <button 
-                        type="submit" 
-                        disabled={loading}
-                        className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-blue-700 transition flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
-                    >
-                        {loading ? (
-                            <>
-                                <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                                <span>Kaydediliyor...</span>
-                            </>
-                        ) : (
-                            <>
-                                <Save size={20} />
-                                <span>Kıyafet Ekle</span>
-                            </>
-                        )}
-                    </button>
-                </div>
+            {/* Submit Button */}
+            <div className="pt-4 border-t border-gray-100 flex justify-end">
+              <button 
+                type="submit" 
+                disabled={loading}
+                className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-blue-700 transition flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Kaydediliyor...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save size={20} />
+                    <span>Kıyafet Ekle</span>
+                  </>
+                )}
+              </button>
+            </div>
 
-            </form>
+          </form>
         </div>
       </div>
     </div>
