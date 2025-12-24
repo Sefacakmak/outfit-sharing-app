@@ -19,13 +19,21 @@ api.interceptors.request.use(
       console.warn('⚠️ Token bulunamadı!');
     }
 
-    // FormData için Content-Type'ı kaldır (axios otomatik ayarlar)
+    // 🔥 FormData için Content-Type'ı kaldır (axios otomatik boundary ekler)
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type'];
+      console.log('📸 FormData tespit edildi, Content-Type kaldırıldı');
+      
+      // FormData içeriğini logla
+      for (let pair of config.data.entries()) {
+        console.log(`   - ${pair[0]}:`, pair[1]);
+      }
     }
 
     console.log('📤 API İsteği:', config.method.toUpperCase(), config.url);
-    console.log('📦 Gönderilen Veri:', config.data);
+    if (!(config.data instanceof FormData)) {
+      console.log('📦 Gönderilen Veri:', config.data);
+    }
 
     return config;
   },

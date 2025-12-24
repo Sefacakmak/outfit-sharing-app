@@ -71,56 +71,76 @@ export default function UserExplore() {
 
   // Backend verisini UI formatına çevir
   const mapBackendDataToDesign = (dataList, currentUserId, myOutfitIds) => {
-    if (!Array.isArray(dataList)) return [];
+  if (!Array.isArray(dataList)) return [];
 
-    return dataList.map(item => {
-      let photoUrl = "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=400";
+  return dataList.map(item => {
+    // 🔥 RESİM URL'SİNİ DOĞRU PARSE ET
+    let photoUrl = "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=400";
+    
+    if (item.image) {
+      let imageUrl = null;
       
-      if (item.image) {
-        let imageUrl = null;
-        if (typeof item.image === 'object') {
-          imageUrl = item.image.url || item.image.path || item.image.secure_url;
-        } else if (typeof item.image === 'string') {
-          imageUrl = item.image;
+      // 1. Object mi?
+      if (typeof item.image === 'object' && item.image !== null) {
+        imageUrl = item.image.url || item.image.path || item.image.secure_url;
+      } 
+      // 2. String mi?
+      else if (typeof item.image === 'string') {
+        imageUrl = item.image;
+      }
+      
+      // 3. URL'yi düzelt
+      if (imageUrl) {
+        // Tam URL ise direkt kullan
+        if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+          photoUrl = imageUrl;
+        } 
+        // Relative path ise base URL ekle
+        else {
+          const cleanPath = imageUrl.startsWith('/') ? imageUrl : '/' + imageUrl;
+          photoUrl = `https://embedo1api.ardaongun.com${cleanPath}`;
         }
-        
-        if (imageUrl) {
-           if (imageUrl.startsWith('http')) {
-             photoUrl = imageUrl;
-           } else {
-             const cleanUrl = imageUrl.startsWith('/') ? imageUrl : '/' + imageUrl;
-             photoUrl = `https://embedo1api.ardaongun.com${cleanUrl}`;
-           }
+      }
+      
+      console.log("🖼️ Resim URL:", {
+        raw: item.image,
+        parsed: imageUrl,
+        final: photoUrl
+      });
+    }
+
+    // Tag'leri temizle
+    let cleanTags = [];
+    if (Array.isArray(item.tags)) {
+      cleanTags = item.tags.map(tag => {
+        if (typeof tag === 'object' && tag !== null) {
+          return tag.name || tag._id || 'Tag';
         }
-      }
+        return String(tag);
+      });
+    }
 
-      let cleanTags = [];
-      if (Array.isArray(item.tags)) {
-        cleanTags = item.tags.map(tag => {
-          if (typeof tag === 'object' && tag !== null) return tag.name || tag._id || 'Tag';
-          return String(tag);
-        });
-      }
+    // Sahiplik kontrolü
+    let isMine = false;
+    if (item.userId && item.userId !== null) {
+      isMine = String(item.userId) === String(currentUserId);
+    } else {
+      isMine = myOutfitIds.includes(item._id);
+    }
 
-      let isMine = false;
-      if (item.userId && item.userId !== null) {
-        isMine = String(item.userId) === String(currentUserId);
-      } else {
-        isMine = myOutfitIds.includes(item._id);
-      }
+    return {
+      _id: String(item._id || item.id),
+      name: String(item.name || "İsimsiz"),
+      description: String(item.description || "Açıklama yok"),
+      value: Number(item.value || item.price || 0),
+      tags: cleanTags,
+      photo: photoUrl,
+      isMine: isMine,
+      createdAt: item.createdAt || new Date().toISOString()
+    };
+  });
+};
 
-      return {
-        _id: String(item._id || item.id),
-        name: String(item.name || "İsimsiz"),
-        description: String(item.description || "Açıklama yok"),
-        value: Number(item.value || item.price || 0),
-        tags: cleanTags,
-        photo: photoUrl,
-        isMine: isMine,
-        createdAt: item.createdAt 
-      };
-    });
-  };
 
   // --- VERİ ÇEKME FONKSİYONU ---
   const fetchData = async () => {

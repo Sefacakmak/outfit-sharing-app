@@ -93,69 +93,97 @@ const AddOutfit = () => {
     }
   };
 
-  // KAYDETME İŞLEMİ
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setLoading(true);
 
-    try {
-      // ADIM 1: Kıyafet Verisini Gönder (JSON)
-      const itemData = {
-        name: name.trim(),
-        description: description.trim(),
-        value: Number(value) || 0,
-        tags: selectedTagIds // 🔥 Admin TAG ID'lerini göndermeli
-      };
+  try {
+    // ADIM 1: Item'ı Oluştur
+    const itemData = {
+      name: name.trim(),
+      description: description.trim(),
+      value: Number(value) || 0,
+      tags: selectedTagIds
+    };
 
-      console.log("📤 Gönderilen Veri:", itemData);
-      console.log("📋 Tag ID'leri:", selectedTagIds);
+    console.log("📤 [ADMIN] 1. Adım - Item verisi gönderiliyor:", itemData);
 
-      // Eğer hiç tag seçilmemişse uyar
-      if (selectedTagIds.length === 0) {
-        console.warn("⚠️ Hiç tag seçilmedi!");
-      }
+    const createResponse = await api.post("/items/add-item", itemData);
+    
+    console.log("✅ [ADMIN] 1. Adım - Item oluşturuldu:", createResponse.data);
+    
+    const newItemId = createResponse.data?.data?._id || createResponse.data?._id;
 
-      const createResponse = await api.post("/items/add-item", itemData);
-      
-      console.log("✅ Ürün oluşturuldu:", createResponse.data);
-      
-      const newItemId = createResponse.data?.data?._id || createResponse.data?._id;
-
-      if (!newItemId) {
-        throw new Error("Item ID alınamadı");
-      }
-
-      // ADIM 2: Varsa Resmi Yükle (FormData)
-      if (imageFile) {
-        console.log("📸 Resim yükleniyor... ID:", newItemId);
-        
-        const formData = new FormData();
-        formData.append("file", imageFile);
-        formData.append("itemId", newItemId);
-
-        await api.post("/items/add-item-photo", formData);
-        console.log("✅ Resim yüklendi!");
-      }
-
-      alert("✅ Kıyafet başarıyla eklendi!");
-      navigate("/dashboard/outfits");
-
-    } catch (error) {
-      console.error("❌ Ekleme hatası:", error);
-      console.error("📋 Hata Detayı:", error.response?.data);
-      
-      const msg = error.response?.data?.message || error.message || "Bir hata oluştu.";
-      
-      // Hata mesajını kullanıcıya göster
-      if (msg.includes("tags") || msg.includes("tag")) {
-        alert(`⚠️ Tag Hatası:\n\n${msg}\n\nSeçili tag ID'leri: ${selectedTagIds.join(', ')}\n\nLütfen sayfayı yenileyip tekrar deneyin.`);
-      } else {
-        alert("❌ Hata: " + msg);
-      }
-    } finally {
-      setLoading(false);
+    if (!newItemId) {
+      throw new Error("Item ID alınamadı");
     }
-  };
+
+    // ADIM 2: Resmi Yükle (Varsa)
+    if (imageFile) {
+      console.log("📸 [ADMIN] 2. Adım - Resim yükleniyor...");
+      console.log("- Item ID:", newItemId);
+      console.log("- Dosya:", imageFile.name, imageFile.size, "bytes");
+      
+      const formData = new FormData();
+      formData.append("file", imageFile);
+      formData.append("itemId", newItemId);
+      
+      // FormData içeriğini kontrol et
+      console.log("📦 FormData hazır:");
+      for (let pair of formData.entries()) {
+        console.log(`   - ${pair[0]}:`, pair[1]);
+      }
+
+      const uploadResponse = await api.post("/items/add-item-photo", formData);
+      
+      console.log("✅ [ADMIN] 2. Adım - Resim yükleme response:", uploadResponse.data);
+      
+      // 🔥 Response'u detaylı incele
+      if (uploadResponse.data) {
+        console.log("📋 Upload response keys:", Object.keys(uploadResponse.data));
+        console.log("📋 Image data:", uploadResponse.data.data?.image || uploadResponse.data.image);
+      }
+
+      // 🔥 KRİTİK: Resmin gerçekten yüklendiğini doğrula
+      console.log("🔍 [ADMIN] 3. Adım - Item'ı tekrar çekip resmi kontrol ediyoruz...");
+      const verifyResponse = await api.get(`/items/get-item/${newItemId}`);
+      const verifiedItem = verifyResponse.data?.data || verifyResponse.data;
+      
+      console.log("📸 Yüklenen resim doğrulaması:");
+      console.log("- Item ID:", verifiedItem._id);
+      console.log("- Image field:", verifiedItem.image);
+      console.log("- Image type:", typeof verifiedItem.image);
+      
+      if (!verifiedItem.image) {
+        console.error("⚠️ UYARI: Resim yüklendi ama item'da image field'ı boş!");
+      }
+    }
+
+    alert("✅ Kıyafet başarıyla eklendi!");
+    navigate("/dashboard/outfits");
+
+  } catch (error) {
+    console.error("❌ [ADMIN] Hata:", error);
+    console.error("📋 Hata Detayı:", {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
+    
+    const msg = error.response?.data?.message || error.message || "Bir hata oluştu.";
+    
+    // Daha detaylı hata mesajı
+    if (error.response?.status === 404) {
+      alert("❌ Hata: API endpoint'i bulunamadı.\n\n" + 
+            "URL: " + error.config?.url + "\n" +
+            "Mesaj: " + msg);
+    } else {
+      alert("❌ Hata: " + msg);
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="max-w-4xl mx-auto p-8">

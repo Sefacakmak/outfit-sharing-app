@@ -94,60 +94,101 @@ const UserAddOutfit = () => {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
+  e.preventDefault();
+  setLoading(true);
 
-    try {
-      // ADIM 1: Ürünü Oluştur (JSON)
-      const itemData = {
-        name: name.trim(),
-        description: description.trim(),
-        value: Number(value) || 0,
-        tags: selectedTagIds // 🔥 TAG ID'LERİNİ GÖNDER
-      };
+  try {
+    // ADIM 1: Item'ı Oluştur
+    const itemData = {
+      name: name.trim(),
+      description: description.trim(),
+      value: Number(value) || 0,
+      tags: selectedTagIds
+    };
 
-      console.log("📤 [USER] Gönderilen Veri:", itemData);
-      console.log("📋 [USER] Tag ID'leri:", selectedTagIds);
+    console.log("📤 [USER] 1. Adım - Item verisi gönderiliyor:", itemData);
 
-      const createResponse = await api.post("/items/add-item", itemData);
+    const createResponse = await api.post("/items/add-item", itemData);
 
-      console.log("✅ [USER] Ürün oluşturuldu:", createResponse.data);
+    console.log("✅ [USER] 1. Adım - Item oluşturuldu:", createResponse.data);
 
-      const newItemId = createResponse.data?.data?._id || createResponse.data?._id;
+    const newItemId = createResponse.data?.data?._id || createResponse.data?._id;
 
-      if (!newItemId) {
-        throw new Error("Item ID alınamadı");
-      }
-
-      // localStorage'a kaydet
-      saveMyOutfitId(newItemId);
-
-      // ADIM 2: Resmi Yükle
-      if (imageFile) {
-        console.log("📸 [USER] Resim yükleniyor... ID:", newItemId);
-        
-        const formData = new FormData();
-        formData.append("file", imageFile);
-        formData.append("itemId", newItemId);
-
-        await api.post("/items/add-item-photo", formData);
-        
-        console.log("✅ [USER] Resim yüklendi!");
-      }
-
-      alert("✅ Kombin başarıyla eklendi!");
-      window.location.href = "/explore";
-
-    } catch (error) {
-      console.error("❌ [USER] Hata:", error);
-      console.error("📋 Hata Detayı:", error.response?.data);
-      
-      const msg = error.response?.data?.message || error.message || "Bir hata oluştu.";
-      alert("❌ Hata: " + msg);
-    } finally {
-      setLoading(false);
+    if (!newItemId) {
+      throw new Error("Item ID alınamadı");
     }
-  };
+
+    // localStorage'a kaydet
+    saveMyOutfitId(newItemId);
+
+    // ADIM 2: Resmi Yükle (Varsa)
+    if (imageFile) {
+      console.log("📸 [USER] 2. Adım - Resim yükleniyor...");
+      console.log("- Item ID:", newItemId);
+      console.log("- Dosya:", imageFile.name, imageFile.size, "bytes");
+      
+      const formData = new FormData();
+      formData.append("file", imageFile);
+      formData.append("itemId", newItemId);
+      
+      // FormData içeriğini kontrol et
+      console.log("📦 FormData hazır:");
+      for (let pair of formData.entries()) {
+        console.log(`   - ${pair[0]}:`, pair[1]);
+      }
+
+      const uploadResponse = await api.post("/items/add-item-photo", formData);
+      
+      console.log("✅ [USER] 2. Adım - Resim yükleme response:", uploadResponse.data);
+      
+      // 🔥 Response'u detaylı incele
+      if (uploadResponse.data) {
+        console.log("📋 Upload response keys:", Object.keys(uploadResponse.data));
+        console.log("📋 Image data:", uploadResponse.data.data?.image || uploadResponse.data.image);
+      }
+
+      // 🔥 KRİTİK: Resmin gerçekten yüklendiğini doğrula
+      console.log("🔍 [USER] 3. Adım - Item'ı tekrar çekip resmi kontrol ediyoruz...");
+      const verifyResponse = await api.get(`/items/get-item/${newItemId}`);
+      const verifiedItem = verifyResponse.data?.data || verifyResponse.data;
+      
+      console.log("📸 Yüklenen resim doğrulaması:");
+      console.log("- Item ID:", verifiedItem._id);
+      console.log("- Image field:", verifiedItem.image);
+      console.log("- Image type:", typeof verifiedItem.image);
+      
+      if (!verifiedItem.image) {
+        console.error("⚠️ UYARI: Resim yüklendi ama item'da image field'ı boş!");
+      }
+    }
+
+    alert("✅ Kombin başarıyla eklendi!");
+    
+    // Sayfayı yenileyerek güncel veriyi göster
+    window.location.href = "/explore";
+
+  } catch (error) {
+    console.error("❌ [USER] Hata:", error);
+    console.error("📋 Hata Detayı:", {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
+    
+    const msg = error.response?.data?.message || error.message || "Bir hata oluştu.";
+    
+    // Daha detaylı hata mesajı
+    if (error.response?.status === 404) {
+      alert("❌ Hata: API endpoint'i bulunamadı.\n\n" + 
+            "URL: " + error.config?.url + "\n" +
+            "Mesaj: " + msg);
+    } else {
+      alert("❌ Hata: " + msg);
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
