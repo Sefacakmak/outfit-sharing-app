@@ -40,35 +40,40 @@ const OutfitDetail = () => {
 
   // Outfit detayını çek
   useEffect(() => {
-    const fetchOutfit = async () => {
-      try {
-        setLoading(true);
-        const response = await api.get(`/items/get-item/${id}`);
+  const fetchOutfit = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get(`/items/get-item/${id}`);
+      
+      let outfitData = response.data?.data || response.data;
+      
+      // 🔥 RESİM URL'SİNİ DOĞRU PARSE ET
+      let photoUrl = "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800";
+      
+      if (outfitData.image) {
+        let imageUrl = null;
         
-        let outfitData = response.data?.data || response.data;
+        if (typeof outfitData.image === 'object' && outfitData.image !== null) {
+          imageUrl = outfitData.image.url || outfitData.image.path || outfitData.image.secure_url;
+        } else if (typeof outfitData.image === 'string') {
+          imageUrl = outfitData.image;
+        }
         
-        // Resim URL'sini düzelt
-        let photoUrl = "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=800";
-        
-        if (outfitData.image) {
-          let imageUrl = null;
-          
-          if (typeof outfitData.image === 'object') {
-            imageUrl = outfitData.image.url || outfitData.image.path;
-          } else if (typeof outfitData.image === 'string') {
-            imageUrl = outfitData.image;
-          }
-          
-          if (imageUrl) {
-            if (imageUrl.startsWith('http')) {
-              photoUrl = imageUrl;
-            } else {
-              const cleanUrl = imageUrl.startsWith('/') ? imageUrl : '/' + imageUrl;
-              photoUrl = `${IMG_BASE_URL}${cleanUrl}`;
-            }
+        if (imageUrl) {
+          if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+            photoUrl = imageUrl;
+          } else {
+            const cleanPath = imageUrl.startsWith('/') ? imageUrl : '/' + imageUrl;
+            photoUrl = `https://embedo1api.ardaongun.com${cleanPath}`;
           }
         }
-
+        
+        console.log("🖼️ [DETAIL] Resim URL:", {
+          raw: outfitData.image,
+          parsed: imageUrl,
+          final: photoUrl
+        });
+      }
         // Tag'leri temizle - obje ise name'ini al
         let cleanTags = [];
         if (Array.isArray(outfitData.tags)) {

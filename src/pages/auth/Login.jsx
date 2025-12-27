@@ -13,13 +13,17 @@ const Login = () => {
   // Sayfa her açıldığında eski oturumu temizle (Sorunsuz geçiş için)
   useEffect(() => {
     localStorage.removeItem("accessToken");
+    localStorage.removeItem("refreshToken"); // 🆕 REFRESH TOKEN DA TEMİZLENMELİ
     localStorage.removeItem("userRole");
   }, []);
 
   const parseJwt = (token) => {
     try {
       return JSON.parse(atob(token.split('.')[1]));
-    } catch (e) { return {}; }
+    } catch (e) { 
+      console.error("JWT parse hatası:", e);
+      return {}; 
+    }
   };
 
   const handleChange = (e) => {
@@ -37,21 +41,39 @@ const Login = () => {
         password: formData.password
       });
 
-      const token = response.data.data?.accessToken;
+      // 🆕 ARTIK HEM ACCESS HEM REFRESH TOKEN ALINMALI
+      const accessToken = response.data.data?.accessToken;
+      const refreshToken = response.data.data?.refreshToken;
 
-      if (token) {
-        // 1. Token'ı kaydet
-        localStorage.setItem('accessToken', token);
+      if (accessToken) {
+        // 1. Access Token'ı kaydet
+        localStorage.setItem('accessToken', accessToken);
+        
+        // 2. 🆕 Refresh Token'ı kaydet (Kritik!)
+        if (refreshToken) {
+          localStorage.setItem('refreshToken', refreshToken);
+          console.log("✅ Refresh token başarıyla kaydedildi");
+        } else {
+          console.warn("⚠️ Refresh token gelmedi!");
+        }
 
-        // 2. Rolü Çöz ve Kaydet
-        const decoded = parseJwt(token);
+        // 3. Rolü Çöz ve Kaydet
+        const decoded = parseJwt(accessToken);
         const role = String(decoded.role || decoded.user?.role || "user").toLowerCase();
         localStorage.setItem('userRole', role);
 
-        // 3. YÖNLENDİRME (Sessiz ve Hızlı)
+        console.log("🔐 Giriş bilgileri:", { 
+          role, 
+          hasRefreshToken: !!refreshToken,
+          userId: decoded.userId || decoded.id || decoded.sub 
+        });
+
+        // 4. YÖNLENDIRME (Role göre)
         if (role.includes("admin") || role.includes("org")) {
+           console.log("➡️ Admin/Organization paneline yönlendiriliyor...");
            window.location.replace("/dashboard");
         } else {
+           console.log("➡️ User explore sayfasına yönlendiriliyor...");
            window.location.replace("/explore");
         }
         
@@ -60,8 +82,11 @@ const Login = () => {
       }
 
     } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.message || 'Giriş başarısız. Bilgileri kontrol edin.');
+      console.error("❌ Login hatası:", err);
+      const errorMsg = err.response?.data?.message 
+        || err.response?.data?.error 
+        || 'Giriş başarısız. Bilgileri kontrol edin.';
+      setError(errorMsg);
     } finally {
       setIsLoading(false);
     }

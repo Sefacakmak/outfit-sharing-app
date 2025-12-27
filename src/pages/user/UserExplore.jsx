@@ -71,56 +71,76 @@ export default function UserExplore() {
 
   // Backend verisini UI formatına çevir
   const mapBackendDataToDesign = (dataList, currentUserId, myOutfitIds) => {
-    if (!Array.isArray(dataList)) return [];
+  if (!Array.isArray(dataList)) return [];
 
-    return dataList.map(item => {
-      let photoUrl = "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=400";
+  return dataList.map(item => {
+    // 🔥 RESİM URL'SİNİ DOĞRU PARSE ET
+    let photoUrl = "https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?w=400";
+    
+    if (item.image) {
+      let imageUrl = null;
       
-      if (item.image) {
-        let imageUrl = null;
-        if (typeof item.image === 'object') {
-          imageUrl = item.image.url || item.image.path || item.image.secure_url;
-        } else if (typeof item.image === 'string') {
-          imageUrl = item.image;
+      // 1. Object mi?
+      if (typeof item.image === 'object' && item.image !== null) {
+        imageUrl = item.image.url || item.image.path || item.image.secure_url;
+      } 
+      // 2. String mi?
+      else if (typeof item.image === 'string') {
+        imageUrl = item.image;
+      }
+      
+      // 3. URL'yi düzelt
+      if (imageUrl) {
+        // Tam URL ise direkt kullan
+        if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://')) {
+          photoUrl = imageUrl;
+        } 
+        // Relative path ise base URL ekle
+        else {
+          const cleanPath = imageUrl.startsWith('/') ? imageUrl : '/' + imageUrl;
+          photoUrl = `https://embedo1api.ardaongun.com${cleanPath}`;
         }
-        
-        if (imageUrl) {
-           if (imageUrl.startsWith('http')) {
-             photoUrl = imageUrl;
-           } else {
-             const cleanUrl = imageUrl.startsWith('/') ? imageUrl : '/' + imageUrl;
-             photoUrl = `https://embedo1api.ardaongun.com${cleanUrl}`;
-           }
+      }
+      
+      console.log("🖼️ Resim URL:", {
+        raw: item.image,
+        parsed: imageUrl,
+        final: photoUrl
+      });
+    }
+
+    // Tag'leri temizle
+    let cleanTags = [];
+    if (Array.isArray(item.tags)) {
+      cleanTags = item.tags.map(tag => {
+        if (typeof tag === 'object' && tag !== null) {
+          return tag.name || tag._id || 'Tag';
         }
-      }
+        return String(tag);
+      });
+    }
 
-      let cleanTags = [];
-      if (Array.isArray(item.tags)) {
-        cleanTags = item.tags.map(tag => {
-          if (typeof tag === 'object' && tag !== null) return tag.name || tag._id || 'Tag';
-          return String(tag);
-        });
-      }
+    // Sahiplik kontrolü
+    let isMine = false;
+    if (item.userId && item.userId !== null) {
+      isMine = String(item.userId) === String(currentUserId);
+    } else {
+      isMine = myOutfitIds.includes(item._id);
+    }
 
-      let isMine = false;
-      if (item.userId && item.userId !== null) {
-        isMine = String(item.userId) === String(currentUserId);
-      } else {
-        isMine = myOutfitIds.includes(item._id);
-      }
+    return {
+      _id: String(item._id || item.id),
+      name: String(item.name || "İsimsiz"),
+      description: String(item.description || "Açıklama yok"),
+      value: Number(item.value || item.price || 0),
+      tags: cleanTags,
+      photo: photoUrl,
+      isMine: isMine,
+      createdAt: item.createdAt || new Date().toISOString()
+    };
+  });
+};
 
-      return {
-        _id: String(item._id || item.id),
-        name: String(item.name || "İsimsiz"),
-        description: String(item.description || "Açıklama yok"),
-        value: Number(item.value || item.price || 0),
-        tags: cleanTags,
-        photo: photoUrl,
-        isMine: isMine,
-        createdAt: item.createdAt 
-      };
-    });
-  };
 
   // --- VERİ ÇEKME FONKSİYONU ---
   const fetchData = async () => {
@@ -142,14 +162,15 @@ export default function UserExplore() {
         queryParams += `&tag=${encodeURIComponent(selectedTag)}`;
       }
 
-      // --- KRİTİK DÜZELTME ---
-      // Backend sadece bu değerleri kabul ediyor. 
-      // "price" gibi desteklenmeyenleri göndermiyoruz (Hata almamak için)
+      // 🔥 KRİTİK DÜzELTME: Backend'in kabul ettiği sort değerlerini kullan
       const validBackendSorts = ["newest", "oldest", "a-z", "z-a"];
       
       if (validBackendSorts.includes(sortOption)) {
         queryParams += `&sort=${sortOption}`;
       }
+      
+      // 🐛 DEBUG: Hangi URL'ye istek atıldığını görelim
+      console.log("📡 API İsteği:", `/items/get-items${queryParams}`);
 
       const response = await api.get(`/items/get-items${queryParams}`);
 
@@ -177,17 +198,27 @@ export default function UserExplore() {
       }
 
       // --- FRONTEND SIRALAMA (Client-Side Sorting) ---
-      // Backend fiyat sıralamayı desteklemediği için burada JS ile sıralıyoruz
+      // Backend fiyat sıralamasını desteklemediği için burada JS ile sıralıyoruz
       if (sortOption === "price_asc") {
         cleanData.sort((a, b) => a.value - b.value);
       } else if (sortOption === "price_desc") {
         cleanData.sort((a, b) => b.value - a.value);
       }
 
+      console.log("✅ Veri başarıyla yüklendi:", cleanData.length, "öğe");
       setItems(cleanData);
 
     } catch (error) {
       console.error("❌ Veri çekme hatası:", error);
+      
+      // 🐛 Hata detayını görelim
+      if (error.response) {
+        console.error("Hata Detayı:", {
+          status: error.response.status,
+          data: error.response.data,
+          url: error.config?.url
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -282,7 +313,7 @@ export default function UserExplore() {
               />
             </div>
             
-            {/* Sıralama Dropdown - Değerler Düzeltildi */}
+            {/* Sıralama Dropdown */}
             <div className="relative min-w-[200px]">
                <Filter className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-500" size={18} />
                <select 
@@ -292,12 +323,8 @@ export default function UserExplore() {
                >
                  <option value="newest">En Yeni</option>
                  <option value="oldest">En Eski</option>
-                 
-                 {/* API için tire (-) kullanımı önemli */}
                  <option value="a-z">İsim (A-Z)</option>
                  <option value="z-a">İsim (Z-A)</option>
-
-                 {/* Bunlar Frontend'de işlenecek */}
                  <option value="price_asc">Fiyat (Artan)</option>
                  <option value="price_desc">Fiyat (Azalan)</option>
                </select>
@@ -307,7 +334,7 @@ export default function UserExplore() {
             </div>
         </div>
 
-        {/* Tag Filters (Yatay Scroll) */}
+        {/* Tag Filters */}
         {availableTags.length > 0 && (
           <div className="mb-8 overflow-x-auto pb-2 scrollbar-hide">
             <div className="flex gap-2 min-w-max">

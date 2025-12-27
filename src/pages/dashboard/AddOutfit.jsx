@@ -1,187 +1,381 @@
-import React, { useState, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import api from '../../services/api'; // Senin oluşturduğun api.js
+import { Upload, X, Save, ArrowLeft } from 'lucide-react';
+import api from '../../services/api';
 
 const AddOutfit = () => {
   const navigate = useNavigate();
-  const fileInputRef = useRef(null);
+  
+  // State Yönetimi
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [value, setValue] = useState("");
+  
+  // 🔥 CRITICAL: Admin için TAG ID'leri kullanılmalı
+  const [selectedTagIds, setSelectedTagIds] = useState([]);
+  const [availableTags, setAvailableTags] = useState([]); // {_id, name} şeklinde objeler
+  
+  const [imageFile, setImageFile] = useState(null);
+  const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [tagsLoading, setTagsLoading] = useState(true);
 
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    price: '',
-    category: '', 
-    image: null, 
-    imagePreview: null 
-  });
+  // Tag Listesini Çek
+  useEffect(() => {
+    const fetchTags = async () => {
+      try {
+        setTagsLoading(true);
+        console.log("📡 Tag'ler yükleniyor...");
+        
+        const response = await api.get('/tags/get-tags');
+        console.log("📦 Tag API Yanıtı:", response.data);
+        
+        let tagList = [];
+        
+        // API yanıtının farklı formatlarını handle et
+        if (response.data?.data?.tags) {
+          tagList = response.data.data.tags;
+        } else if (response.data?.tags) {
+          tagList = response.data.tags;
+        } else if (Array.isArray(response.data?.data)) {
+          tagList = response.data.data;
+        } else if (Array.isArray(response.data)) {
+          tagList = response.data;
+        }
 
-  const handleChange = (e) => {
-    setFormData({ ...formData, [e.target.name]: e.target.value });
-  };
+        // Tag'lerin {_id, name} formatında olduğundan emin ol
+        const formattedTags = tagList.map(tag => {
+          if (typeof tag === 'object' && tag._id) {
+            return { _id: tag._id, name: tag.name || 'İsimsiz' };
+          }
+          // Eğer sadece string ise (olmamalı ama yine de kontrol)
+          console.warn("⚠️ Tag objesi değil:", tag);
+          return null;
+        }).filter(Boolean);
 
+        console.log("✅ Formatlanmış Tag'ler:", formattedTags);
+        setAvailableTags(formattedTags);
+        
+      } catch (error) {
+        console.error("❌ Tag listesi yüklenemedi:", error);
+        console.error("Hata Detayı:", error.response?.data);
+        alert("Tag'ler yüklenirken hata oluştu. Lütfen sayfayı yenileyin.");
+      } finally {
+        setTagsLoading(false);
+      }
+    };
+    fetchTags();
+  }, []);
+
+  // Resim Seçme
   const handleImageChange = (e) => {
     const file = e.target.files[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setFormData({
-          ...formData,
-          image: file,
-          imagePreview: reader.result 
-        });
-      };
-      reader.readAsDataURL(file);
+      setImageFile(file);
+      setPreview(URL.createObjectURL(file));
     }
   };
 
-  const handleBoxClick = () => {
-    fileInputRef.current.click();
+  // Tag Seçip/Çıkarma (ID bazlı)
+  const handleTagToggle = (tagId) => {
+    console.log("🔘 Tag tıklandı (ID):", tagId);
+    
+    if (selectedTagIds.includes(tagId)) {
+      // Tag varsa çıkar
+      const newTags = selectedTagIds.filter(id => id !== tagId);
+      setSelectedTagIds(newTags);
+      console.log("➖ Tag çıkarıldı. Yeni liste:", newTags);
+    } else {
+      // Tag yoksa ekle
+      const newTags = [...selectedTagIds, tagId];
+      setSelectedTagIds(newTags);
+      console.log("➕ Tag eklendi. Yeni liste:", newTags);
+    }
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  setLoading(true);
 
-    try {
-      // -------------------------------------------------------
-      // 1. AŞAMA: Kıyafet Verisini Gönder (JSON Formatında)
-      // -------------------------------------------------------
+  try {
+    // ADIM 1: Item'ı Oluştur
+    const itemData = {
+      name: name.trim(),
+      description: description.trim(),
+      value: Number(value) || 0,
+      tags: selectedTagIds
+    };
+
+    console.log("📤 [ADMIN] 1. Adım - Item verisi gönderiliyor:", itemData);
+
+    const createResponse = await api.post("/items/add-item", itemData);
+    
+    console.log("✅ [ADMIN] 1. Adım - Item oluşturuldu:", createResponse.data);
+    
+    const newItemId = createResponse.data?.data?._id || createResponse.data?._id;
+
+    if (!newItemId) {
+      throw new Error("Item ID alınamadı");
+    }
+
+    // ADIM 2: Resmi Yükle (Varsa)
+    if (imageFile) {
+      console.log("📸 [ADMIN] 2. Adım - Resim yükleniyor...");
+      console.log("- Item ID:", newItemId);
+      console.log("- Dosya:", imageFile.name, imageFile.size, "bytes");
       
-      // Postman'de 'tags' bir dizi (array) olarak görünüyor.
-      // Senin formundaki 'category'yi alıp bir dizinin içine koyuyoruz.
-      const tagsArray = formData.category ? [formData.category] : [];
-
-      const itemPayload = {
-        name: formData.name,
-        description: formData.description,
-        value: Number(formData.price), // Postman 'value' bekliyor ve sayı olmalı.
-        tags: tagsArray // Backend 'category' değil 'tags' bekliyor.
-      };
-
-      console.log("1. İstek Gönderiliyor:", itemPayload);
-
-      // api.js kullandığımız için base URL ve token otomatik eklenir.
-      const itemResponse = await api.post('/items/add-item', itemPayload);
-
-      console.log("1. Aşama Başarılı:", itemResponse.data);
-
-      // Yeni oluşan ID'yi güvenli şekilde alıyoruz
-      const newItemId = itemResponse.data.data?._id || itemResponse.data._id;
-
-      if (!newItemId) throw new Error("Kıyafet oluşturuldu ama ID alınamadı.");
-
-      // -------------------------------------------------------
-      // 2. AŞAMA: RESİM YÜKLEME (FormData Formatında)
-      // -------------------------------------------------------
-      if (formData.image) {
-        console.log("2. Resim yükleniyor... ID:", newItemId);
-        
-        const photoData = new FormData();
-        // Postman'deki 'add item photo' isteğine birebir uyuyoruz
-        photoData.append('file', formData.image);  // Anahtar: 'file'
-        photoData.append('itemId', newItemId);     // Anahtar: 'itemId'
-
-        // api.js Content-Type'ı otomatik halleder (multipart/form-data)
-        await api.post('/items/add-item-photo', photoData);
-        
-        console.log("2. Aşama Başarılı (Resim Yüklendi)");
+      const formData = new FormData();
+      formData.append("file", imageFile);
+      formData.append("itemId", newItemId);
+      
+      // FormData içeriğini kontrol et
+      console.log("📦 FormData hazır:");
+      for (let pair of formData.entries()) {
+        console.log(`   - ${pair[0]}:`, pair[1]);
       }
 
-      alert("Harika! Kıyafet başarıyla eklendi. 🎉");
+      const uploadResponse = await api.post("/items/add-item-photo", formData);
       
-      // Başarılı olunca listeye atıyoruz. Liste sayfası açıldığında
-      // kendi useEffect'i çalışıp yeni veriyi sunucudan çekecektir.
-      navigate('/dashboard'); 
+      console.log("✅ [ADMIN] 2. Adım - Resim yükleme response:", uploadResponse.data);
+      
+      // 🔥 Response'u detaylı incele
+      if (uploadResponse.data) {
+        console.log("📋 Upload response keys:", Object.keys(uploadResponse.data));
+        console.log("📋 Image data:", uploadResponse.data.data?.image || uploadResponse.data.image);
+      }
 
-    } catch (error) {
-      console.error("Hata Detayı:", error);
-      const errorMsg = error.response?.data?.message || error.message || "Bir hata oluştu.";
-      alert("Hata: " + errorMsg);
-    } finally {
-      setLoading(false);
+      // 🔥 KRİTİK: Resmin gerçekten yüklendiğini doğrula
+      console.log("🔍 [ADMIN] 3. Adım - Item'ı tekrar çekip resmi kontrol ediyoruz...");
+      const verifyResponse = await api.get(`/items/get-item/${newItemId}`);
+      const verifiedItem = verifyResponse.data?.data || verifyResponse.data;
+      
+      console.log("📸 Yüklenen resim doğrulaması:");
+      console.log("- Item ID:", verifiedItem._id);
+      console.log("- Image field:", verifiedItem.image);
+      console.log("- Image type:", typeof verifiedItem.image);
+      
+      if (!verifiedItem.image) {
+        console.error("⚠️ UYARI: Resim yüklendi ama item'da image field'ı boş!");
+      }
     }
-  };
+
+    alert("✅ Kıyafet başarıyla eklendi!");
+    navigate("/dashboard/outfits");
+
+  } catch (error) {
+    console.error("❌ [ADMIN] Hata:", error);
+    console.error("📋 Hata Detayı:", {
+      message: error.message,
+      response: error.response?.data,
+      status: error.response?.status
+    });
+    
+    const msg = error.response?.data?.message || error.message || "Bir hata oluştu.";
+    
+    // Daha detaylı hata mesajı
+    if (error.response?.status === 404) {
+      alert("❌ Hata: API endpoint'i bulunamadı.\n\n" + 
+            "URL: " + error.config?.url + "\n" +
+            "Mesaj: " + msg);
+    } else {
+      alert("❌ Hata: " + msg);
+    }
+  } finally {
+    setLoading(false);
+  }
+};
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen flex justify-center">
-      <div className="w-full max-w-2xl bg-white rounded-2xl shadow-lg border border-gray-100 p-8">
-        <div className="mb-8">
-          <h2 className="text-2xl font-bold text-gray-800">Yeni Kıyafet Ekle</h2>
-          <p className="text-gray-500 text-sm">Koleksiyonuna yeni bir parça eklemek için formu doldur.</p>
+    <div className="max-w-4xl mx-auto p-8">
+      {/* Header */}
+      <div className="flex items-center gap-4 mb-8">
+        <button 
+          onClick={() => navigate('/dashboard/outfits')}
+          className="p-2 hover:bg-gray-100 rounded-full transition"
+        >
+          <ArrowLeft size={24} className="text-gray-600" />
+        </button>
+        <h1 className="text-2xl font-bold text-gray-800">Yeni Kıyafet Ekle (Admin)</h1>
+      </div>
+      
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        
+        {/* Sol Kolon: Resim Yükleme */}
+        <div className="lg:col-span-1">
+          <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200">
+            <h3 className="font-semibold text-gray-700 mb-4">Ürün Fotoğrafı</h3>
+            
+            <div className="relative aspect-[3/4] bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg flex flex-col items-center justify-center hover:bg-gray-100 transition cursor-pointer overflow-hidden group">
+              <input 
+                type="file" 
+                accept="image/*" 
+                onChange={handleImageChange}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+              />
+              
+              {preview ? (
+                <>
+                  <img src={preview} alt="Önizleme" className="w-full h-full object-cover" />
+                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition flex items-center justify-center z-20 pointer-events-none">
+                    <span className="text-white font-medium">Fotoğrafı Değiştir</span>
+                  </div>
+                </>
+              ) : (
+                <div className="text-center p-4">
+                  <Upload className="w-12 h-12 text-gray-400 mx-auto mb-2" />
+                  <span className="text-gray-500 font-medium">Fotoğraf Yükle</span>
+                  <p className="text-xs text-gray-400 mt-1">PNG, JPG</p>
+                </div>
+              )}
+            </div>
+            
+            {preview && (
+              <button 
+                onClick={() => { setPreview(null); setImageFile(null); }}
+                className="mt-3 w-full py-2 text-red-600 text-sm font-medium hover:bg-red-50 rounded-lg transition"
+              >
+                Fotoğrafı Kaldır
+              </button>
+            )}
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-6">
-          {/* İsim */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Kıyafet Adı</label>
-            <input type="text" name="name" onChange={handleChange} required className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-blue-500 transition-all" placeholder="Örn: Mavi Gömlek" />
-          </div>
-
-          {/* Açıklama */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">Açıklama</label>
-            <textarea name="description" rows="3" onChange={handleChange} className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-blue-500 transition-all resize-none" placeholder="Ürün hakkında kısa bilgi..." />
-          </div>
-
-          {/* Fiyat ve Kategori */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* Sağ Kolon: Form */}
+        <div className="lg:col-span-2">
+          <form onSubmit={handleSubmit} className="bg-white p-8 rounded-xl shadow-sm border border-gray-200 space-y-6">
+            
+            {/* İsim */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Fiyat (₺)</label>
-              <input type="number" name="price" onChange={handleChange} required className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-blue-500 transition-all" placeholder="0.00" />
+              <label className="block text-sm font-medium text-gray-700 mb-1">Kıyafet Adı</label>
+              <input 
+                type="text" 
+                required 
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
+                placeholder="Örn: Mavi Kot Ceket"
+                value={name} 
+                onChange={(e) => setName(e.target.value)} 
+              />
             </div>
+
+            {/* Açıklama */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Kategori (Etiket)</label>
-              <select name="category" onChange={handleChange} required className="w-full px-4 py-3 rounded-xl border border-gray-200 outline-none focus:border-blue-500 transition-all bg-white">
-                <option value="">Seçiniz...</option>
-                <option value="Casual">Gündelik (Casual)</option>
-                <option value="Formal">Resmi (Formal)</option>
-                <option value="Sport">Spor (Sport)</option>
-                <option value="Winter">Kışlık (Winter)</option>
-                <option value="Summer">Yazlık (Summer)</option>
-              </select>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Açıklama</label>
+              <textarea 
+                required 
+                rows="4"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
+                placeholder="Ürün hakkında detaylı bilgi..."
+                value={description} 
+                onChange={(e) => setDescription(e.target.value)} 
+              />
             </div>
-          </div>
 
-          {/* Resim Yükleme Alanı */}
-          <div>
-             <label className="block text-sm font-medium text-gray-700 mb-2">Fotoğraf</label>
-             <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageChange} className="hidden" />
-             <div onClick={handleBoxClick} className={`border-2 border-dashed rounded-xl p-8 text-center cursor-pointer relative overflow-hidden group transition-all ${formData.imagePreview ? 'border-blue-500 bg-blue-50' : 'border-gray-300 hover:bg-gray-50'}`}>
-                {formData.imagePreview ? (
-                  <div className="relative">
-                    <img src={formData.imagePreview} alt="Önizleme" className="h-64 w-full object-contain mx-auto rounded-lg" />
-                    <div className="absolute inset-0 flex items-center justify-center bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity text-white font-medium">Değiştirmek için tıkla</div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center">
-                    <div className="text-4xl mb-3">📸</div>
-                    <p className="text-gray-900 font-medium">Fotoğraf Yükle</p>
-                    <p className="text-xs text-gray-500 mt-1">PNG, JPG (Max 5MB)</p>
-                  </div>
-                )}
-             </div>
-          </div>
+            {/* Fiyat */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Fiyat (₺)</label>
+              <input 
+                type="number" 
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none transition"
+                placeholder="0.00"
+                value={value} 
+                onChange={(e) => setValue(e.target.value)} 
+              />
+            </div>
 
-          {/* Butonlar */}
-          <div className="flex justify-end gap-4 pt-4 border-t border-gray-100">
-             <button type="button" onClick={() => navigate('/dashboard')} className="px-6 py-2.5 rounded-lg text-gray-600 hover:bg-gray-100 font-medium transition-colors">İptal</button>
-             <button 
+            {/* Tag Seçimi - DÜZELTİLMİŞ */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Etiketler {selectedTagIds.length > 0 && <span className="text-blue-600">({selectedTagIds.length} seçili)</span>}
+              </label>
+              
+              {tagsLoading ? (
+                <div className="flex justify-center items-center py-8 border border-gray-200 rounded-lg bg-gray-50">
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="w-8 h-8 border-3 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                    <p className="text-sm text-gray-500">Etiketler yükleniyor...</p>
+                  </div>
+                </div>
+              ) : availableTags.length > 0 ? (
+                <div className="border border-gray-200 rounded-lg p-4 bg-gray-50 max-h-48 overflow-y-auto">
+                  <div className="flex flex-wrap gap-2">
+                    {availableTags.map(tag => {
+                      const isSelected = selectedTagIds.includes(tag._id);
+                      
+                      return (
+                        <button
+                          key={tag._id}
+                          type="button"
+                          onClick={() => handleTagToggle(tag._id)}
+                          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-all duration-200 border ${
+                            isSelected
+                              ? 'bg-blue-600 text-white border-blue-600 shadow-sm scale-105'
+                              : 'bg-white text-gray-700 border-gray-300 hover:bg-gray-100 hover:border-blue-300'
+                          }`}
+                        >
+                          {isSelected && <span className="mr-1">✓</span>}
+                          {tag.name}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-center py-8 border border-gray-200 rounded-lg bg-gray-50">
+                  <p className="text-gray-500 mb-2">⚠️ Henüz sistemde etiket yok.</p>
+                  <button 
+                    type="button"
+                    onClick={() => navigate('/dashboard/tags')}
+                    className="text-blue-600 text-sm font-medium hover:underline"
+                  >
+                    Etiket Yönetimine Git →
+                  </button>
+                </div>
+              )}
+              
+              {/* Seçili Tag'lerin İsimleri ve ID'leri */}
+              {selectedTagIds.length > 0 && (
+                <div className="mt-3 p-3 bg-blue-50 rounded-lg border border-blue-200">
+                  <p className="text-xs font-semibold text-blue-700 mb-1">Seçili Etiketler:</p>
+                  <div className="flex flex-wrap gap-1 mb-2">
+                    {selectedTagIds.map((id) => {
+                      const tag = availableTags.find(t => t._id === id);
+                      return (
+                        <span key={id} className="text-xs bg-blue-600 text-white px-2 py-1 rounded-full">
+                          {tag?.name || 'Bilinmiyor'}
+                        </span>
+                      );
+                    })}
+                  </div>
+                  <p className="text-xs text-blue-600 font-mono">
+                    ID'ler: {selectedTagIds.join(', ')}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Submit Button */}
+            <div className="pt-4 border-t border-gray-100 flex justify-end">
+              <button 
                 type="submit" 
-                disabled={loading} 
-                className={`px-8 py-2.5 rounded-lg text-white font-medium shadow-lg transition-all flex items-center gap-2
-                  ${loading ? 'bg-blue-400 cursor-not-allowed' : 'bg-blue-600 hover:bg-blue-700 shadow-blue-200'}
-                `}
-             >
-               {loading ? (
-                 <>
-                   <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                   Kaydediliyor...
-                 </>
-               ) : 'Kaydet'}
-             </button>
-          </div>
-        </form>
+                disabled={loading}
+                className="bg-blue-600 text-white px-8 py-3 rounded-lg font-bold hover:bg-blue-700 transition flex items-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed"
+              >
+                {loading ? (
+                  <>
+                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                    <span>Kaydediliyor...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save size={20} />
+                    <span>Kıyafet Ekle</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+          </form>
+        </div>
       </div>
     </div>
   );
