@@ -42,95 +42,135 @@ const OutfitList = () => {
   };
 
 // Veri Çekme
-  const fetchOutfits = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      
-      let queryParams = `?page=${page}&limit=${LIMIT}`;
+ // fetchOutfits fonksiyonunu şöyle değiştirin:
 
-      if (debouncedSearch) {
-        queryParams += `&search=${encodeURIComponent(debouncedSearch)}`;
-      }
+const fetchOutfits = async () => {
+  try {
+    setLoading(true);
+    setError(null);
+    
+    let queryParams = `?page=${page}&limit=${LIMIT}`;
 
-      const validBackendSorts = ["newest", "oldest", "a-z", "z-a"];
-      if (validBackendSorts.includes(sortOption)) {
-        queryParams += `&sort=${sortOption}`;
-      }
-
-      console.log("📡 [ADMIN] API İsteği:", `/items/get-items${queryParams}`);
-
-      const response = await api.get(`/items/get-items${queryParams}`);
-      
-      let dataArray = [];
-      let totalPagesData = 1; // Varsayılan 1
-
-      // VERİYİ AYIKLAMA KISMI
-      if (response.data?.data?.items) {
-        // 1. Senaryo: Backend tam pagination veriyor
-        dataArray = response.data.data.items;
-        totalPagesData = response.data.data.totalPages || 1;
-      } else {
-        // 2. Senaryo: Backend düz array veriyor (Sorunlu kısım burasıydı)
-        dataArray = response.data.data || response.data || [];
-        
-        // 🔥 ÇÖZÜM BURADA:
-        // Eğer gelen veri sayısı LIMIT (8) kadar veya fazlaysa,
-        // kodun "Sonraki" sayfaya geçebilmesi için toplam sayfa sayısını 
-        // manuel olarak (bulunduğumuz sayfa + 1) yapıyoruz.
-        if (dataArray.length >= LIMIT) {
-            totalPagesData = page + 1; 
-        } else {
-            // Eğer 8'den az veri geldiyse, bu son sayfadır.
-            totalPagesData = page;
-        }
-      }
-
-      // Güvenlik önlemi
-      if (totalPagesData < page) totalPagesData = page;
-
-      // VERİYİ İŞLE VE RESİMLERİ PARSE ET
-      let processedData = dataArray.map(item => {
-        const photoUrl = parseImageUrl(item.image);
-        
-        let cleanTags = [];
-        if (Array.isArray(item.tags)) {
-          cleanTags = item.tags.map(tag => {
-            if (typeof tag === 'object' && tag !== null) {
-              return tag.name || 'Etiket';
-            }
-            return String(tag);
-          });
-        }
-
-        return {
-          ...item,
-          _id: item._id || item.id,
-          photo: photoUrl,
-          tags: cleanTags,
-          value: Number(item.value || item.price || 0)
-        };
-      });
-
-      // Frontend sıralama
-      if (sortOption === "price_asc") {
-        processedData.sort((a, b) => a.value - b.value);
-      } else if (sortOption === "price_desc") {
-        processedData.sort((a, b) => b.value - a.value);
-      }
-      
-      // Slice işlemini kaldırdık çünkü backend zaten sayfalanmış veri gönderiyor.
-
-      setOutfits(processedData);
-      setTotalPages(totalPagesData);
-
-    } catch (err) {
-      console.error("❌ [ADMIN] Veri çekme hatası:", err);
-      setError("Veriler yüklenirken bir sorun oluştu.");
-    } finally {
-      setLoading(false);
+    if (debouncedSearch) {
+      queryParams += `&search=${encodeURIComponent(debouncedSearch)}`;
     }
-  };
+
+    const validBackendSorts = ["newest", "oldest", "a-z", "z-a"];
+    if (validBackendSorts.includes(sortOption)) {
+      queryParams += `&sort=${sortOption}`;
+    }
+
+    console.log("📡 [ADMIN] API İsteği:", `/items/get-items${queryParams}`);
+
+    const response = await api.get(`/items/get-items${queryParams}`);
+    
+    let dataArray = [];
+    let totalPagesData = 1;
+    let totalItemsData = 0;
+
+    // 🔥 GELİŞTİRİLMİŞ VERİ PARSING
+    if (response.data?.data?.items && response.data?.data?.pagination) {
+      // Senaryo 1: Backend tam pagination bilgisi veriyor (İDEAL)
+      dataArray = response.data.data.items;
+      totalPagesData = response.data.data.pagination.totalPages || 1;
+      totalItemsData = response.data.data.pagination.totalItems || 0;
+      
+      console.log("✅ Backend pagination bilgisi var:", {
+        totalPages: totalPagesData,
+        totalItems: totalItemsData,
+        currentPage: page
+      });
+      
+    } else if (response.data?.data?.items) {
+      // Senaryo 2: Sadece items var, pagination yok
+      dataArray = response.data.data.items;
+      totalPagesData = response.data.data.totalPages || 1;
+      
+      console.log("⚠️ Kısmi pagination bilgisi:", {
+        items: dataArray.length,
+        totalPages: totalPagesData
+      });
+      
+    } else {
+      // Senaryo 3: Düz array geliyor (EN SORUNLU)
+      dataArray = response.data?.data || response.data || [];
+      
+      // 🔥 GEÇİCİ ÇÖZÜM: Sonraki sayfa kontrolü
+      if (dataArray.length === LIMIT) {
+        // Tam limit kadar veri geldiyse, sonraki sayfayı kontrol et
+        totalPagesData = page + 1;
+        
+        console.log("⚠️ Pagination yok, tahmini sayfa:", {
+          currentItems: dataArray.length,
+          estimatedTotalPages: totalPagesData
+        });
+      } else if (dataArray.length < LIMIT) {
+        // Limit'ten az veri geldiyse, bu son sayfa
+        totalPagesData = page;
+        
+        console.log("✅ Son sayfa tespit edildi:", {
+          currentItems: dataArray.length,
+          totalPages: totalPagesData
+        });
+      }
+    }
+
+    // Güvenlik önlemi
+    if (totalPagesData < page) {
+      totalPagesData = page;
+    }
+
+    // 🔥 VERİYİ İŞLE VE RESİMLERİ PARSE ET
+    let processedData = dataArray.map(item => {
+      const photoUrl = parseImageUrl(item.image);
+      
+      let cleanTags = [];
+      if (Array.isArray(item.tags)) {
+        cleanTags = item.tags.map(tag => {
+          if (typeof tag === 'object' && tag !== null) {
+            return tag.name || 'Etiket';
+          }
+          return String(tag);
+        });
+      }
+
+      return {
+        ...item,
+        _id: item._id || item.id,
+        photo: photoUrl,
+        tags: cleanTags,
+        value: Number(item.value || item.price || 0)
+      };
+    });
+
+    // Frontend sıralama (sadece backend desteklemiyorsa)
+    if (sortOption === "price_asc") {
+      processedData.sort((a, b) => a.value - b.value);
+    } else if (sortOption === "price_desc") {
+      processedData.sort((a, b) => b.value - a.value);
+    }
+
+    setOutfits(processedData);
+    setTotalPages(totalPagesData);
+    
+    // 🔥 DETAYLI LOG
+    console.log("📊 Sayfalama Durumu:", {
+      currentPage: page,
+      totalPages: totalPagesData,
+      itemsShown: processedData.length,
+      hasNext: page < totalPagesData,
+      hasPrev: page > 1
+    });
+
+  } catch (err) {
+    console.error("❌ [ADMIN] Veri çekme hatası:", err);
+    console.error("Hata detayı:", err.response?.data);
+    setError("Veriler yüklenirken bir sorun oluştu.");
+    setOutfits([]);
+  } finally {
+    setLoading(false);
+  }
+};
 
   // Arama geciktirme
   useEffect(() => {
